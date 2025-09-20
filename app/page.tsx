@@ -1,5 +1,5 @@
-import CryptoPriceList from "../components/crypto-price-list"
+import CryptoPriceServer from "@/components/crypto-price-server"
 
 export default function Page() {
-  return <CryptoPriceList />
+  return <CryptoPriceServer />
 }
