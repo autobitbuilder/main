@@ -3,6 +3,8 @@
 import { useState, useEffect } from "react"
 import Image from "next/image"
 import { ArrowDown, ArrowUp, Search, Star, RefreshCw } from "lucide-react"
+import MarketOverview from "./market-overview"
+import MarketTrendsChart from "./market-trends-chart"
 
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
@@ -126,6 +128,9 @@ export default function CryptoPriceClient({ initialData }: CryptoPriceClientProp
           {isRefreshing ? "Refreshing..." : "Refresh Prices"}
         </Button>
       </div>
+
+      <MarketOverview cryptoData={cryptoData} />
+      <MarketTrendsChart cryptoData={cryptoData} />
 
       <Tabs defaultValue="all" className="mb-6">
         <TabsList>
