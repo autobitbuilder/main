@@ -1,167 +1,204 @@
-"use client";
+"use client"
 
-import Image from "next/image";
-import { useRef, useState } from "react";
-import { Toaster, toast } from "react-hot-toast";
-import DropDown, { VibeType } from "../components/DropDown";
-import Footer from "../components/Footer";
-import Header from "../components/Header";
-import LoadingDots from "../components/LoadingDots";
-import Toggle from "../components/Toggle";
-import { ChatCompletionStream } from "together-ai/lib/ChatCompletionStream";
+import { useState, useEffect, useCallback } from "react"
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import { Button } from "@/components/ui/button"
+import { Badge } from "@/components/ui/badge"
+import { RefreshCw, TrendingUp, TrendingDown, DollarSign, BarChart3 } from "lucide-react"
+import { CryptoPriceCard } from "@/components/crypto-price-card"
+import { PriceChart } from "@/components/price-chart"
 
-export default function Home() {
-  const [loading, setLoading] = useState(false);
-  const [bio, setBio] = useState("");
-  const [vibe, setVibe] = useState<VibeType>("Professional");
-  const [generatedBios, setGeneratedBios] = useState<String>("");
-  const [isLlama, setIsLlama] = useState(false);
+interface CryptoData {
+  id: string
+  symbol: string
+  name: string
+  current_price: number
+  price_change_percentage_24h: number
+  market_cap: number
+  total_volume: number
+  high_24h: number
+  low_24h: number
+  last_updated: string
+}
 
-  const bioRef = useRef<null | HTMLDivElement>(null);
+export default function CryptoPriceList() {
+  const [cryptoData, setCryptoData] = useState<CryptoData[]>([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
+  const [lastUpdated, setLastUpdated] = useState<Date | null>(null)
+  const [refreshing, setRefreshing] = useState(false)
 
-  const scrollToBios = () => {
-    if (bioRef.current !== null) {
-      bioRef.current.scrollIntoView({ behavior: "smooth" });
+  const fetchCryptoData = useCallback(async () => {
+    try {
+      setError(null)
+      const response = await fetch(
+        "https://api.coingecko.com/api/v3/coins/markets?vs_currency=usd&ids=bitcoin,ethereum,cardano,polkadot,chainlink&order=market_cap_desc&per_page=5&page=1&sparkline=false&price_change_percentage=24h",
+      )
+
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`)
+      }
+
+      const data = await response.json()
+      setCryptoData(data)
+      setLastUpdated(new Date())
+    } catch (err) {
+      console.error("Error fetching crypto data:", err)
+      setError(err instanceof Error ? err.message : "Failed to fetch crypto data")
+    } finally {
+      setLoading(false)
+      setRefreshing(false)
     }
-  };
+  }, [])
 
-  const prompt = `Generate 3 ${
-    vibe === "Casual" ? "relaxed" : vibe === "Funny" ? "silly" : "Professional"
-  } twitter biographies with no hashtags and clearly labeled "1.", "2.", and "3.". Only return these 3 twitter bios, nothing else. ${
-    vibe === "Funny" ? "Make the biographies humerous" : ""
-  }Make sure each generated biography is less than 300 characters, has short sentences that are found in Twitter bios, and feel free to use this context as well: ${bio}${
-    bio.slice(-1) === "." ? "" : "."
-  }`;
+  const handleRefresh = useCallback(async () => {
+    setRefreshing(true)
+    await fetchCryptoData()
+  }, [fetchCryptoData])
 
-  const generateBio = async (e: any) => {
-    e.preventDefault();
-    setGeneratedBios("");
-    setLoading(true);
-    const response = await fetch("/api/together", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        prompt,
-        model: isLlama
-          ? "meta-llama/Meta-Llama-3.1-8B-Instruct-Turbo"
-          : "mistralai/Mixtral-8x7B-Instruct-v0.1",
-      }),
-    });
+  useEffect(() => {
+    fetchCryptoData()
 
-    if (!response.ok) {
-      throw new Error(response.statusText);
+    // Set up auto-refresh every 30 seconds
+    const interval = setInterval(fetchCryptoData, 30000)
+
+    return () => clearInterval(interval)
+  }, [fetchCryptoData])
+
+  const formatCurrency = (value: number) => {
+    return new Intl.NumberFormat("en-US", {
+      style: "currency",
+      currency: "USD",
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2,
+    }).format(value)
+  }
+
+  const formatMarketCap = (value: number) => {
+    if (value >= 1e12) {
+      return `$${(value / 1e12).toFixed(2)}T`
+    } else if (value >= 1e9) {
+      return `$${(value / 1e9).toFixed(2)}B`
+    } else if (value >= 1e6) {
+      return `$${(value / 1e6).toFixed(2)}M`
     }
+    return formatCurrency(value)
+  }
 
-    const runner = ChatCompletionStream.fromReadableStream(response.body!);
-    runner.on("content", (delta) => setGeneratedBios((prev) => prev + delta));
-
-    scrollToBios();
-    setLoading(false);
-  };
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-background p-4">
+        <div className="max-w-7xl mx-auto">
+          <div className="flex items-center justify-center h-64">
+            <div className="flex items-center space-x-2">
+              <RefreshCw className="h-6 w-6 animate-spin text-primary" />
+              <span className="text-lg font-medium">Loading crypto prices...</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    )
+  }
 
   return (
-    <div className="flex max-w-5xl mx-auto flex-col items-center justify-center py-2 min-h-screen">
-      <Header />
-      <main className="flex flex-1 w-full flex-col items-center justify-center text-center px-4 mt-12 sm:mt-20">
-        <p className="border rounded-2xl py-1 px-4 text-slate-500 text-sm mb-5 hover:scale-105 transition duration-300 ease-in-out">
-          <b>126,657</b> bios generated so far
-        </p>
-        <h1 className="sm:text-6xl text-4xl max-w-[708px] font-bold text-slate-900">
-          Generate your next Twitter bio using AI
-        </h1>
-        <div className="mt-7">
-          <Toggle isGPT={isLlama} setIsGPT={setIsLlama} />
+    <div className="min-h-screen bg-background p-4">
+      <div className="max-w-7xl mx-auto space-y-6">
+        {/* Header */}
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+          <div>
+            <h1 className="text-3xl font-bold text-balance">Crypto Price Tracker</h1>
+            <p className="text-muted-foreground mt-1">Real-time cryptocurrency prices and market data</p>
+          </div>
+          <div className="flex items-center gap-3">
+            {lastUpdated && (
+              <span className="text-sm text-muted-foreground">Last updated: {lastUpdated.toLocaleTimeString()}</span>
+            )}
+            <Button onClick={handleRefresh} disabled={refreshing} className="bg-primary hover:bg-primary/90">
+              <RefreshCw className={`h-4 w-4 mr-2 ${refreshing ? "animate-spin" : ""}`} />
+              Refresh
+            </Button>
+          </div>
         </div>
 
-        <div className="max-w-xl w-full">
-          <div className="flex mt-10 items-center space-x-3">
-            <Image
-              src="/1-black.png"
-              width={30}
-              height={30}
-              alt="1 icon"
-              className="mb-5 sm:mb-0"
+        {/* Error State */}
+        {error && (
+          <Card className="border-destructive/50 bg-destructive/10">
+            <CardContent className="pt-6">
+              <div className="flex items-center space-x-2">
+                <div className="h-2 w-2 bg-destructive rounded-full" />
+                <span className="text-destructive font-medium">Error: {error}</span>
+              </div>
+            </CardContent>
+          </Card>
+        )}
+
+        {/* Bitcoin Highlight Card */}
+        {cryptoData.length > 0 && (
+          <Card className="border-primary/20 bg-gradient-to-r from-primary/5 to-secondary/5">
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <DollarSign className="h-5 w-5 text-primary" />
+                Bitcoin (BTC) - Featured
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                <div className="space-y-2">
+                  <p className="text-sm text-muted-foreground">Current Price</p>
+                  <p className="text-3xl font-bold text-primary">{formatCurrency(cryptoData[0].current_price)}</p>
+                </div>
+                <div className="space-y-2">
+                  <p className="text-sm text-muted-foreground">24h Change</p>
+                  <div className="flex items-center gap-2">
+                    {cryptoData[0].price_change_percentage_24h >= 0 ? (
+                      <TrendingUp className="h-4 w-4 text-green-500" />
+                    ) : (
+                      <TrendingDown className="h-4 w-4 text-red-500" />
+                    )}
+                    <Badge
+                      variant={cryptoData[0].price_change_percentage_24h >= 0 ? "default" : "destructive"}
+                      className={cryptoData[0].price_change_percentage_24h >= 0 ? "bg-green-500" : ""}
+                    >
+                      {cryptoData[0].price_change_percentage_24h.toFixed(2)}%
+                    </Badge>
+                  </div>
+                </div>
+                <div className="space-y-2">
+                  <p className="text-sm text-muted-foreground">Market Cap</p>
+                  <p className="text-xl font-semibold">{formatMarketCap(cryptoData[0].market_cap)}</p>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        )}
+
+        {/* Price Chart */}
+        {cryptoData.length > 0 && (
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <BarChart3 className="h-5 w-5" />
+                Price Overview
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <PriceChart data={cryptoData} />
+            </CardContent>
+          </Card>
+        )}
+
+        {/* Crypto Grid */}
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+          {cryptoData.map((crypto) => (
+            <CryptoPriceCard
+              key={crypto.id}
+              crypto={crypto}
+              formatCurrency={formatCurrency}
+              formatMarketCap={formatMarketCap}
             />
-            <p className="text-left font-medium">
-              Drop in your job{" "}
-              <span className="text-slate-500">(or your favorite hobby)</span>.
-            </p>
-          </div>
-          <textarea
-            value={bio}
-            onChange={(e) => setBio(e.target.value)}
-            rows={4}
-            className="w-full rounded-md border-gray-300 shadow-sm focus:border-black focus:ring-black my-5"
-            placeholder={"e.g. Amazon CEO"}
-          />
-          <div className="flex mb-5 items-center space-x-3">
-            <Image src="/2-black.png" width={30} height={30} alt="1 icon" />
-            <p className="text-left font-medium">Select your vibe.</p>
-          </div>
-          <div className="block">
-            <DropDown vibe={vibe} setVibe={(newVibe) => setVibe(newVibe)} />
-          </div>
-          {loading ? (
-            <button
-              className="bg-black rounded-xl text-white font-medium px-4 py-2 sm:mt-10 mt-8 hover:bg-black/80 w-full"
-              disabled
-            >
-              <LoadingDots color="white" style="large" />
-            </button>
-          ) : (
-            <button
-              className="bg-black rounded-xl text-white font-medium px-4 py-2 sm:mt-10 mt-8 hover:bg-black/80 w-full"
-              onClick={(e) => generateBio(e)}
-            >
-              Generate your bio &rarr;
-            </button>
-          )}
+          ))}
         </div>
-        <Toaster
-          position="top-center"
-          reverseOrder={false}
-          toastOptions={{ duration: 2000 }}
-        />
-        <hr className="h-px bg-gray-700 border-1 dark:bg-gray-700" />
-        <div className="space-y-10 my-10">
-          {generatedBios && (
-            <>
-              <div>
-                <h2
-                  className="sm:text-4xl text-3xl font-bold text-slate-900 mx-auto"
-                  ref={bioRef}
-                >
-                  Your generated bios
-                </h2>
-              </div>
-              <div className="space-y-8 flex flex-col items-center justify-center max-w-xl mx-auto">
-                {generatedBios
-                  .substring(generatedBios.indexOf("1") + 3)
-                  .split(/2\.|3\./)
-                  .map((generatedBio) => {
-                    return (
-                      <div
-                        className="bg-white rounded-xl shadow-md p-4 hover:bg-gray-100 transition cursor-copy border"
-                        onClick={() => {
-                          navigator.clipboard.writeText(generatedBio);
-                          toast("Bio copied to clipboard", {
-                            icon: "✂️",
-                          });
-                        }}
-                        key={generatedBio}
-                      >
-                        <p>{generatedBio}</p>
-                      </div>
-                    );
-                  })}
-              </div>
-            </>
-          )}
-        </div>
-      </main>
-      <Footer />
+      </div>
     </div>
-  );
+  )
 }
